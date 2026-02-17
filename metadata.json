@@ -1,0 +1,8 @@
+{
+  "name": "Vibogram",
+  "description": "A futuristic social networking platform featuring AI-powered interactions and integrated code environments.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
