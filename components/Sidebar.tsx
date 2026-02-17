@@ -1,7 +1,8 @@
 
 import React from 'react';
-import { X, Settings, User, Bell, Shield, HelpCircle, LogOut, ChevronRight, Zap } from 'lucide-react';
+import { X, Settings, User, Bell, Shield, HelpCircle, LogOut, ChevronRight } from 'lucide-react';
 import { User as UserType } from '../types';
+import Logo from './Logo';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -24,8 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, user, onLogout }) =>
         <div className="flex flex-col h-full p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2">
-              <Zap className="w-6 h-6 text-blue-400" />
+            <div className="flex items-center gap-3">
+              <Logo size={32} />
               <span className="text-xl font-black tracking-tight neon-text">Menu</span>
             </div>
             <button 
