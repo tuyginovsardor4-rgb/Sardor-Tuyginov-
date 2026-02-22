@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, Search, Plus, Code2, LogIn, X, Bell } from 'lucide-react';
 import { POSTS as INITIAL_POSTS, STORIES } from './constants';
 import { AppTab, User, Post } from './types';
@@ -12,48 +12,135 @@ import ProfileView from './components/ProfileView';
 import LoginView from './components/LoginView';
 import Sidebar from './components/Sidebar';
 import Logo from './components/Logo';
+import ChatView from './components/ChatView';
+import { supabase } from './services/supabase';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
   const [newPostContent, setNewPostContent] = useState('');
   const [notifications, setNotifications] = useState<string[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-  const [currentUser] = useState<User>({
-    id: 'me',
-    name: 'Sardor',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sardor'
-  });
+  const fetchPosts = async () => {
+    setLoadingPosts(true);
+    const { data, error } = await supabase
+      .from('posts')
+      .select(`
+        id,
+        content,
+        created_at,
+        type,
+        likes_count,
+        comments_count,
+        profiles (
+          id,
+          full_name,
+          avatar_url
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching posts:', error);
+    } else if (data) {
+      const formattedPosts: Post[] = data.map((p: any) => ({
+        id: p.id,
+        user: {
+          id: p.profiles.id,
+          name: p.profiles.full_name || 'User',
+          avatar: p.profiles.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profiles.id}`
+        },
+        timestamp: new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        content: p.content,
+        type: p.type as any,
+        likes: p.likes_count,
+        comments: p.comments_count,
+        shares: 0
+      }));
+      setPosts(formattedPosts);
+    }
+    setLoadingPosts(false);
+  };
+
+  useEffect(() => {
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setIsLoggedIn(true);
+        setCurrentUser({
+          id: session.user.id,
+          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`
+        });
+      }
+    });
+
+    fetchPosts();
+
+    // Real-time posts update
+    const channel = supabase
+      .channel('public:posts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => {
+        fetchPosts();
+      })
+      .subscribe();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setIsLoggedIn(true);
+        setCurrentUser({
+          id: session.user.id,
+          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`
+        });
+      } else {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const addNotification = (msg: string) => {
     setNotifications(prev => [...prev, msg]);
     setTimeout(() => setNotifications(prev => prev.slice(1)), 3000);
   };
 
-  const handleCreatePost = () => {
-    if (!newPostContent.trim()) return;
+  const handleCreatePost = async () => {
+    if (!newPostContent.trim() || !currentUser) return;
     
-    const newPost: Post = {
-      id: `p${Date.now()}`,
-      user: currentUser,
-      timestamp: 'Just now',
-      content: newPostContent,
-      type: 'text',
-      likes: 0,
-      comments: 0,
-      shares: 0
-    };
+    const { error } = await supabase
+      .from('posts')
+      .insert([
+        { 
+          user_id: currentUser.id, 
+          content: newPostContent,
+          type: 'text'
+        }
+      ]);
 
-    setPosts([newPost, ...posts]);
-    setNewPostContent('');
-    setShowCreatePost(false);
-    addNotification("Post muvaffaqiyatli ulashildi! 🚀");
+    if (error) {
+      console.error('Error saving post:', error);
+      addNotification("Xatolik: Post saqlanmadi ❌");
+    } else {
+      setNewPostContent('');
+      setShowCreatePost(false);
+      addNotification("Post muvaffaqiyatli ulashildi! 🚀");
+      fetchPosts(); // Refresh posts
+    }
   };
 
-  if (!isLoggedIn) {
+  if (!isLoggedIn || !currentUser) {
     return <LoginView onLogin={() => setIsLoggedIn(true)} />;
   }
 
@@ -110,21 +197,28 @@ const App: React.FC = () => {
           <div className="space-y-6 pt-4 px-4 animate-in fade-in">
             <StoriesBar stories={STORIES} />
             <div className="space-y-6">
-              {posts.map(post => (
-                <PostCard key={post.id} post={post} />
-              ))}
+              {loadingPosts ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                  <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                  <p className="text-white/20 text-xs font-bold uppercase tracking-widest">Loading Feed...</p>
+                </div>
+              ) : posts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
+                    <Plus className="w-8 h-8 text-white/10" />
+                  </div>
+                  <p className="text-white/40 text-sm italic">Hali postlar yo'q. Birinchi bo'lib ulashing!</p>
+                </div>
+              ) : (
+                posts.map(post => (
+                  <PostCard key={post.id} post={post} />
+                ))
+              )}
             </div>
           </div>
         )}
 
-        {activeTab === 'chat' && (
-          <div className="flex flex-col items-center justify-center h-[70vh] text-white/40 p-10 text-center space-y-4">
-            <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center animate-pulse">
-               <LogIn className="w-10 h-10 opacity-20" />
-            </div>
-            <p className="italic text-sm">Xabarlar bo'limi tez kunda ishga tushadi...</p>
-          </div>
-        )}
+        {activeTab === 'chat' && <ChatView currentUser={currentUser} />}
 
         {activeTab === 'ai' && <AIChat />}
         {activeTab === 'code' && <CodePlayground />}

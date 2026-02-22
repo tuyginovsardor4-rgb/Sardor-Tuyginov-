@@ -60,7 +60,7 @@ console.log(greet("Developer"));`);
           <Terminal size={12} /> TERMINAL
         </div>
         <div className="text-green-400 text-xs">
-          > vibogram run app.js<br/>
+          &gt; vibogram run app.js<br/>
           <span className="text-white">Hello, Developer! 🚀</span>
         </div>
       </div>

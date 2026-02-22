@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Vibogram Confirmation</title>
+  <style>
+    body {
+      background-color: #05011a;
+      color: #ffffff;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 32px;
+      text-align: center;
+    }
+    .logo {
+      margin-bottom: 30px;
+    }
+    h2 {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      color: #ffffff;
+    }
+    p {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    .otp-container {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px dashed rgba(59, 130, 246, 0.3);
+      padding: 24px;
+      border-radius: 20px;
+      margin-bottom: 32px;
+    }
+    .otp-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 42px;
+      font-weight: 900;
+      color: #3b82f6;
+      letter-spacing: 0.2em;
+      text-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+    }
+    .footer {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.3);
+      margin-top: 40px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <!-- Vibogram Logo Placeholder -->
+      <svg width="60" height="60" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx="30" fill="black"/>
+        <path d="M30 30L50 70L70 30" stroke="#3b82f6" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    
+    <h2>Confirm your signup</h2>
+    <p>Kelajakka xush kelibsiz! Vibogram tarmog'iga qo'shilish uchun quyidagi 8 xonali tasdiqlash kodini kiriting:</p>
+    
+    <div class="otp-container">
+      <div class="otp-code">{{ .Token }}</div>
+    </div>
+    
+    <p>Agar siz ushbu so'rovni yubormagan bo'lsangiz, ushbu xatni e'tiborsiz qoldiring.</p>
+    
+    <div class="footer">
+      Vibogram &copy; 2026 • Future of Social
+    </div>
+  </div>
+</body>
+</html>

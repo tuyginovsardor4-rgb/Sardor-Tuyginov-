@@ -3,6 +3,7 @@ import React from 'react';
 import { X, Settings, User, Bell, Shield, HelpCircle, LogOut, ChevronRight } from 'lucide-react';
 import { User as UserType } from '../types';
 import Logo from './Logo';
+import { supabase } from '../services/supabase';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -12,6 +13,11 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, user, onLogout }) => {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    onLogout();
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -42,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, user, onLogout }) =>
             <img src={user.avatar} className="w-12 h-12 rounded-full border border-blue-500/30" alt={user.name} />
             <div className="overflow-hidden">
               <h4 className="font-bold text-sm truncate">{user.name}</h4>
-              <p className="text-[10px] text-white/40 truncate">vibogram.io/sardor</p>
+              <p className="text-[10px] text-white/40 truncate">vibogram.io/{user.name.toLowerCase().replace(/\s/g, '')}</p>
             </div>
           </div>
 
@@ -58,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, user, onLogout }) =>
           {/* Footer Actions */}
           <div className="pt-6 border-t border-white/5">
             <button 
-              onClick={onLogout}
+              onClick={handleSignOut}
               className="w-full flex items-center justify-between p-4 glass rounded-2xl text-red-400 hover:bg-red-400/5 transition-colors group"
             >
               <div className="flex items-center gap-3">
