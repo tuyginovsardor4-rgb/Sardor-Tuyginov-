@@ -14,18 +14,19 @@ CREATE TABLE public.profiles (
   username TEXT UNIQUE,
   full_name TEXT,
   avatar_url TEXT,
+  bio TEXT,
+  phone TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. POSTS (Postlar)
+-- 3. POSTS (Postlar - Reels va rasmlar uchun)
 CREATE TABLE public.posts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   content TEXT NOT NULL,
-  type TEXT DEFAULT 'text', -- 'text', 'image', 'code'
+  type TEXT DEFAULT 'text', -- 'text', 'image', 'video'
   media_url TEXT,
-  code_snippet TEXT,
-  language TEXT,
+  title TEXT, -- Reels uchun nom
   likes_count INTEGER DEFAULT 0,
   comments_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

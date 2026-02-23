@@ -28,12 +28,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     setError(null);
 
     try {
+      console.log('Attempting auth...', isLogin ? 'Login' : 'Signup');
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
         if (error) throw error;
+        console.log('Login success:', data);
         onLogin();
       } else {
         if (formData.password !== formData.confirmPassword) {
@@ -49,6 +51,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           }
         });
         if (error) throw error;
+        console.log('Signup success:', data);
         
         // Agar email tasdiqlash yoqilgan bo'lsa (Supabase default)
         if (data.user && data.session === null) {
@@ -58,7 +61,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Xatolik yuz berdi');
+      console.error('Auth error:', err);
+      setError(err.message || 'Xatolik yuz berdi. Internet aloqasini tekshiring.');
     } finally {
       setLoading(false);
     }
@@ -83,6 +87,23 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       onLogin();
     } catch (err: any) {
       setError(err.message || 'Kod noto\'g\'ri yoki muddati o\'tgan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: formData.email,
+      });
+      if (error) throw error;
+      setError('Yangi kod yuborildi! 📧');
+    } catch (err: any) {
+      setError(err.message || 'Kod yuborishda xatolik');
     } finally {
       setLoading(false);
     }
@@ -119,18 +140,31 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
-                <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest leading-tight">{error}</p>
+              <div className={`p-3 rounded-xl border ${error.includes('yuborildi') ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                <p className={`${error.includes('yuborildi') ? 'text-green-400' : 'text-red-400'} text-[10px] font-bold uppercase tracking-widest leading-tight`}>
+                  {error}
+                </p>
               </div>
             )}
 
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full py-5 bg-blue-600 rounded-2xl font-black text-white shadow-xl shadow-blue-600/30 hover:shadow-blue-600/50 transition-all flex items-center justify-center gap-2 group active:scale-95 uppercase tracking-widest text-xs disabled:opacity-50"
-            >
-              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Tasdiqlash'}
-            </button>
+            <div className="space-y-3">
+              <button 
+                type="submit"
+                disabled={loading}
+                className="w-full py-5 bg-blue-600 rounded-2xl font-black text-white shadow-xl shadow-blue-600/30 hover:shadow-blue-600/50 transition-all flex items-center justify-center gap-2 group active:scale-95 uppercase tracking-widest text-xs disabled:opacity-50"
+              >
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Tasdiqlash'}
+              </button>
+              
+              <button 
+                type="button"
+                onClick={handleResendOtp}
+                disabled={loading}
+                className="w-full py-4 glass rounded-2xl text-[10px] font-black text-white/40 hover:text-white transition-all uppercase tracking-widest disabled:opacity-50"
+              >
+                Kodni qayta yuborish
+              </button>
+            </div>
           </form>
 
           <button 

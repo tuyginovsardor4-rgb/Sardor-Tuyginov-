@@ -17,6 +17,7 @@ import { supabase } from './services/supabase';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
@@ -35,12 +36,15 @@ const App: React.FC = () => {
         content,
         created_at,
         type,
+        media_url,
+        title,
         likes_count,
         comments_count,
         profiles (
           id,
           full_name,
-          avatar_url
+          avatar_url,
+          username
         )
       `)
       .order('created_at', { ascending: false });
@@ -53,11 +57,14 @@ const App: React.FC = () => {
         user: {
           id: p.profiles.id,
           name: p.profiles.full_name || 'User',
-          avatar: p.profiles.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profiles.id}`
+          avatar: p.profiles.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${p.profiles.full_name || p.profiles.id}`,
+          username: p.profiles.username
         },
         timestamp: new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         content: p.content,
         type: p.type as any,
+        mediaUrl: p.media_url,
+        title: p.title,
         likes: p.likes_count,
         comments: p.comments_count,
         shares: 0
@@ -67,17 +74,70 @@ const App: React.FC = () => {
     setLoadingPosts(false);
   };
 
+  const fetchUserProfile = async (userId: string) => {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+      return null;
+    }
+    return profile;
+  };
+
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setIsLoggedIn(true);
-        setCurrentUser({
-          id: session.user.id,
-          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`
-        });
+    // Safety timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (!isAppReady) {
+        console.warn('App initialization timed out, forcing ready state');
+        setIsAppReady(true);
       }
+    }, 6000);
+
+    // Check initial session
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error) {
+        console.error('Session check error:', error);
+        setIsAppReady(true);
+        return;
+      }
+
+      if (session?.user) {
+        try {
+          const profile = await fetchUserProfile(session.user.id);
+          if (profile) {
+            setCurrentUser({
+              id: profile.id,
+              name: profile.full_name || 'User',
+              avatar: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${profile.id}`,
+              username: profile.username,
+              bio: profile.bio,
+              phone: profile.phone
+            });
+          } else {
+            // Fallback if profile doesn't exist yet
+            setCurrentUser({
+              id: session.user.id,
+              name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+              avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${session.user.id}`
+            });
+          }
+          setIsLoggedIn(true);
+        } catch (e) {
+          console.error('Profile fetch error:', e);
+          // Set emergency fallback to prevent stuck screen
+          setCurrentUser({
+            id: session.user.id,
+            name: session.user.email?.split('@')[0] || 'User',
+            avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${session.user.id}`
+          });
+          setIsLoggedIn(true);
+        }
+      }
+      setIsAppReady(true);
     });
 
     fetchPosts();
@@ -91,21 +151,45 @@ const App: React.FC = () => {
       .subscribe();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         setIsLoggedIn(true);
-        setCurrentUser({
-          id: session.user.id,
-          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.id}`
-        });
+        try {
+          const profile = await fetchUserProfile(session.user.id);
+          if (profile) {
+            setCurrentUser({
+              id: profile.id,
+              name: profile.full_name || 'User',
+              avatar: profile.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${profile.id}`,
+              username: profile.username,
+              bio: profile.bio,
+              phone: profile.phone
+            });
+          } else {
+            setCurrentUser({
+              id: session.user.id,
+              name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+              avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${session.user.id}`
+            });
+          }
+        } catch (e) {
+          console.error('Auth change profile fetch error:', e);
+          // Set emergency fallback
+          setCurrentUser({
+            id: session.user.id,
+            name: session.user.email?.split('@')[0] || 'User',
+            avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${session.user.id}`
+          });
+        }
       } else {
         setIsLoggedIn(false);
         setCurrentUser(null);
       }
+      setIsAppReady(true);
     });
 
     return () => {
+      clearTimeout(timeout);
       subscription.unsubscribe();
       supabase.removeChannel(channel);
     };
@@ -116,6 +200,10 @@ const App: React.FC = () => {
     setTimeout(() => setNotifications(prev => prev.slice(1)), 3000);
   };
 
+  const [postType, setPostType] = useState<'text' | 'image' | 'video'>('text');
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [postTitle, setPostTitle] = useState('');
+
   const handleCreatePost = async () => {
     if (!newPostContent.trim() || !currentUser) return;
     
@@ -125,7 +213,9 @@ const App: React.FC = () => {
         { 
           user_id: currentUser.id, 
           content: newPostContent,
-          type: 'text'
+          type: postType,
+          media_url: mediaUrl || null,
+          title: postTitle || null
         }
       ]);
 
@@ -134,14 +224,61 @@ const App: React.FC = () => {
       addNotification("Xatolik: Post saqlanmadi ❌");
     } else {
       setNewPostContent('');
+      setMediaUrl('');
+      setPostTitle('');
+      setPostType('text');
       setShowCreatePost(false);
       addNotification("Post muvaffaqiyatli ulashildi! 🚀");
-      fetchPosts(); // Refresh posts
+      fetchPosts();
     }
   };
 
-  if (!isLoggedIn || !currentUser) {
+  if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    return (
+      <div className="min-h-screen bg-[#05011a] flex flex-col items-center justify-center p-10 text-center space-y-6">
+        <div className="w-20 h-20 bg-red-500/10 rounded-[2rem] flex items-center justify-center border border-red-500/20">
+          <Logo size={40} />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-black text-white">Konfiguratsiya xatosi</h2>
+          <p className="text-white/40 text-sm leading-relaxed">
+            Supabase URL yoki Anon Key topilmadi. Iltimos, Google AI Studio'dagi "Environment Variables" bo'limiga ushbu ma'lumotlarni kiriting.
+          </p>
+        </div>
+        <div className="glass p-4 rounded-2xl border-white/5 text-left w-full max-w-xs">
+          <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-2">Kerakli o'zgaruvchilar:</p>
+          <ul className="text-[10px] font-mono text-blue-400 space-y-1">
+            <li>• VITE_SUPABASE_URL</li>
+            <li>• VITE_SUPABASE_ANON_KEY</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAppReady) {
+    return (
+      <div className="min-h-screen bg-[#05011a] flex flex-col items-center justify-center space-y-6">
+        <div className="w-24 h-24 bg-black rounded-[2rem] flex items-center justify-center shadow-2xl border border-white/10 animate-pulse">
+          <Logo size={60} />
+        </div>
+        <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+        <p className="text-white/20 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Initializing Vibogram...</p>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
     return <LoginView onLogin={() => setIsLoggedIn(true)} />;
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#05011a] flex flex-col items-center justify-center space-y-4">
+        <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+        <p className="text-white/20 text-[10px] font-black uppercase tracking-widest">Profilingiz yuklanmoqda...</p>
+      </div>
+    );
   }
 
   return (
@@ -163,6 +300,7 @@ const App: React.FC = () => {
           setIsLoggedIn(false);
           setIsSidebarOpen(false);
         }}
+        onNavigate={setActiveTab}
       />
 
       <header className="sticky top-0 z-[60] px-5 py-4 flex items-center justify-between glass border-b border-white/5">
@@ -195,7 +333,7 @@ const App: React.FC = () => {
       <main className="flex-1 pb-32 overflow-y-auto scrollbar-hide">
         {activeTab === 'home' && (
           <div className="space-y-6 pt-4 px-4 animate-in fade-in">
-            <StoriesBar stories={STORIES} />
+            <StoriesBar currentUser={currentUser} />
             <div className="space-y-6">
               {loadingPosts ? (
                 <div className="flex flex-col items-center justify-center py-20 space-y-4">
@@ -234,23 +372,63 @@ const App: React.FC = () => {
 
       {showCreatePost && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in slide-in-from-bottom-20 duration-300">
-          <div className="glass w-full max-w-sm rounded-[2.5rem] p-7 border border-white/10 mb-20 shadow-2xl">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-black">Broadcast Post</h3>
+          <div className="glass w-full max-w-sm rounded-[2.5rem] p-7 border border-white/10 mb-20 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl font-black">Broadcast</h3>
               <button onClick={() => setShowCreatePost(false)} className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-xl hover:bg-white/10">
                 <X size={20}/>
               </button>
             </div>
-            <textarea 
-              value={newPostContent}
-              onChange={(e) => setNewPostContent(e.target.value)}
-              placeholder="Nima yangiliklar, bro?"
-              className="w-full h-32 bg-transparent border-none focus:outline-none text-white/90 placeholder:text-white/20 resize-none text-lg mb-4"
-              autoFocus
-            />
+
+            <div className="flex gap-2 p-1 glass rounded-2xl">
+              {(['text', 'image', 'video'] as const).map(t => (
+                <button 
+                  key={t}
+                  onClick={() => setPostType(t)}
+                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${postType === t ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-white/20 hover:text-white/40'}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-4">
+              <textarea 
+                value={newPostContent}
+                onChange={(e) => setNewPostContent(e.target.value)}
+                placeholder={postType === 'video' ? "Video haqida qisqacha..." : "Nima yangiliklar?"}
+                className="w-full h-24 bg-transparent border-none focus:outline-none text-white/90 placeholder:text-white/20 resize-none text-lg"
+                autoFocus
+              />
+
+              {postType !== 'text' && (
+                <div className="space-y-4">
+                  <div className="glass p-1 rounded-2xl border border-white/10 flex items-center px-4">
+                    <input 
+                      type="text" 
+                      placeholder={`${postType === 'video' ? 'Video' : 'Rasm'} sarlavhasi (ixtiyoriy)`}
+                      className="w-full bg-transparent p-3 text-sm text-white focus:outline-none placeholder:text-white/20"
+                      value={postTitle}
+                      onChange={(e) => setPostTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="glass p-1 rounded-2xl border border-white/10 flex items-center px-4">
+                    <input 
+                      type="url" 
+                      placeholder={`${postType === 'video' ? 'Video' : 'Rasm'} URL manzili`}
+                      className="w-full bg-transparent p-3 text-sm text-white focus:outline-none placeholder:text-white/20"
+                      value={mediaUrl}
+                      onChange={(e) => setMediaUrl(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button 
               onClick={handleCreatePost}
-              className="w-full py-5 bg-blue-600 rounded-2xl font-black text-white shadow-xl shadow-blue-600/40 active:scale-95 transition-all uppercase tracking-widest"
+              disabled={loadingPosts}
+              className="w-full py-5 bg-blue-600 rounded-2xl font-black text-white shadow-xl shadow-blue-600/40 active:scale-95 transition-all uppercase tracking-widest text-xs"
             >
               Ulashish (Push)
             </button>
